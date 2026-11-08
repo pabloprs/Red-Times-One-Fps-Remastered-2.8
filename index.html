@@ -33,7 +33,8 @@ body{margin:0;overflow:hidden;background:#fff;font-family:'Courier New',Courier,
 </style>
 </head>
 <body>
-<div id="menu"><h1>RED TIMES</h1><p>RECORD ACTUEL : VAGUE <span id="rec">1</span></p><button class="btn" style="font-size:24px;padding:15px 40px" onclick="start()">JOUER</button></div>
+<div id="menu"><h1>RED TIMES</h1><p>RECORD ACTUEL : VAGUE <span id="rec">1</span></p><button class="btn" style="font-size:24px;padding:15px 40px" onclick="start()">JOUER</button>
+<button class="btn" onclick="$('mf').click()">🎵 CHOISIR MA MUSIQUE</button><input type="file" id="mf" accept="audio/*,.mp3" multiple hidden><p id="mstat" style="font-size:16px;margin:10px 0 0">Musique : beat intégré (ou choisis tes MP3)</p></div>
 <div id="ui">
   <div id="tbar"><i id="tfill"></i></div>
   <div id="hud">VAGUE: <span id="wv">1</span> | ENNEMIS: <span id="en">0</span> | ARMURE: <span id="ar">0</span> | ARGENT: $<span id="mn">0</span> | ARME: <span id="wp">Couteau</span> <span id="am"></span></div>
@@ -246,7 +247,8 @@ const TRACKS=['freeze-rael','mw2','isshin-ashina','kpop','oj-simpson'];
 let mus=null,ready=[],synth=false,mrate=1,nextT=0,stp=0,nbuf=null,mg=null;
 function nextTrack(){const c=ready.filter(a=>a!==mus),l=c.length?c:ready;if(!l.length)return;mus=l[Math.floor(Math.random()*l.length)];mus.currentTime=0;mus.play().catch(()=>{});}
 function musicStart(){
- if(synth||mus||ready.length)return;
+ if(synth||mus)return;
+ if(ready.length){nextTrack();return;} // morceaux choisis par le joueur
  TRACKS.forEach(n=>{const a=new Audio('music/'+n+'.mp3');a.preload='auto';a.preservesPitch=a.mozPreservesPitch=a.webkitPreservesPitch=false;
   a.addEventListener('canplay',()=>{if(!ready.includes(a)){ready.push(a);if(!mus)nextTrack();}});a.addEventListener('ended',nextTrack);});
  setTimeout(()=>{if(!ready.length)synthStart();},2000);
@@ -272,6 +274,22 @@ function stepSynth(t,s){ // boucle trap sombre en ré mineur
  if(m===0||m===3||m===8)tone('sine',[55,55,65.4,49][Math.floor(s/8)%4],t,.4,.45);
  if(s<16)[[0,293.7],[3,349.2],[6,440],[8,392],[11,349.2],[14,329.6]].forEach(a=>{if(m===a[0])tone('sine',a[1]*2,t,.5,.12);});
 }
+
+/* ---------- Musique perso : choisie sur ton appareil, mémorisée dans le navigateur ---------- */
+const DB={
+ open:()=>new Promise((ok,ko)=>{const r=indexedDB.open('redtimes',1);r.onupgradeneeded=()=>r.result.createObjectStore('m');r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error);}),
+ async put(fs){const d=await DB.open(),st=d.transaction('m','readwrite').objectStore('m');st.clear();fs.forEach((f,i)=>st.put(f,i));},
+ async all(){const d=await DB.open();return new Promise((ok,ko)=>{const r=d.transaction('m').objectStore('m').getAll();r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error);});}
+};
+function addTracks(fs){
+ fs.forEach(f=>{const a=new Audio(URL.createObjectURL(f));a.preload='auto';a.preservesPitch=a.mozPreservesPitch=a.webkitPreservesPitch=false;a.addEventListener('ended',nextTrack);ready.push(a);});
+ $('mstat').textContent='♪ '+ready.length+' morceau'+(ready.length>1?'x':'')+' chargé'+(ready.length>1?'s':'');
+}
+$('mf').addEventListener('change',e=>{
+ const fs=[...e.target.files].filter(f=>f.type.startsWith('audio')||/\.(mp3|m4a|wav|ogg|flac)$/i.test(f.name));if(!fs.length)return;
+ ready=[];mus=null;addTracks(fs);DB.put(fs).catch(()=>{});
+});
+DB.all().then(fs=>{if(fs&&fs.length)addTracks(fs);}).catch(()=>{});
 
 /* ---------- Combat ---------- */
 const ray=new THREE.Raycaster(),center=new THREE.Vector2(0,0),BG=new THREE.BoxGeometry(.05,.05,.4),BM=new THREE.MeshBasicMaterial({color:0xff0022}),BMP=new THREE.MeshBasicMaterial({color:0x22ccff});
